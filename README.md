@@ -12,6 +12,7 @@ import stirbot
 #['Bot', 'Pool', 'Process', '__builtins__', '__doc__', '__file__', '__name__', '__package__', '__path__', 'cpu_count', 'logger', 'logging', 're', 'socket', 'ssl', 'sys', 'time']
 
 bot = stirbot.Bot(server="irc.freenode.net", port=7000, botnick="stirbot", pswrd=False, channelist=['#stirbot'], maxthreads=16)
+
 #>>> dir(bot)
 #>>> ['__class__', '__delattr__', '__dict__', '__doc__', '__format__', '__getattribute__', '__hash__', '__init__', '__module__', '__new__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__sizeof__', '__str__', '__subclasshook__', '__weakref__', '_addUser', '_auth', '_authed', '_compileCommandRe', '_compileCommands', '_compileServerRe', '_connected', '_identified', '_identifyNick', '_ircsock', '_joinChanlist', '_joinedUser', '_listen', '_listenThread', '_modeSet', '_modeUnset', '_pong', '_removeUser', '_running', '_send', '_serverConnect', '_serverDisconnect', '_serverRe', '_sniffLine', '_sniffMessage', '_somebodyQuit', '_stopThreads', '_thinkpool', '_updateACC', '_updateNames', '_updateTopic', '_waitForShutdown', 'addCommand', 'botnick', 'channellist', 'channels', 'checkACC', 'commands', 'joinChannel', 'kickUser', 'loadCommands', 'maxthreads', 'partChannel', 'port', 'pswrd', 'quit', 'removeCommand', 'sendMessage', 'sendNotice', 'server', 'setAway', 'setChannelTopic', 'setMode', 'setNick', 'shutdown', 'start', 'unsetAway', 'unsetMode']
 
@@ -35,23 +36,19 @@ def echo(channel, nick, reMatch):
 	bot.sendMessage(channel, "%s" % reMatch.group(1))
 
 def quit(channel, nick, reMatch):
-	if channel in bot.ADMINS: # if the message is direct chat
-		bot.shutdown()
-	elif channel != nick:
-		if '@' in bot.CHANNELS[channel]['users'][nick] or nick in bot.ADMINS:
-			bot.shutdown() # Close connection to server with an optional closing [message] and stop the 'blocking' loop if it is running
+	bot.shutdown()
 
 # Here you can define: a dict of regex to search for in each "PRIVMSG" or "NOTICE" and the corresponding function to fire if the regex is found
 # Note: if you try and define this dict before defining your command functions you will get an error 
 
 commands = {
-		'100':{'function': oneHund, 	'regex': r'(.*(why|Why).*%s.*|.*%s.*(why|Why).*)' % (bot.BOTNICK, bot.BOTNICK)},
+		'100':{'function': oneHund, 	'regex': r'(.*(why|Why).*%s.*|.*%s.*(why|Why).*)' % (bot.botnick, bot.botnick)},
 		'quit':{'function': quit, 		'regex': r'!quit'},
 		'echo':{'function': echo, 		'regex': r'(.*)'}
 		}
 
 # You would then load the dict into the bot using the following method
-# Note: 'loadCommands' will OVERWRITE the entire current dict that resides in 'Bot.COMMANDS'
+# Note: 'loadCommands' will OVERWRITE the entire current dict that resides in 'Bot.commands'
 
 bot.loadCommands(commands)
 
