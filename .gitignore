@@ -30,6 +30,12 @@ var/
 *.manifest
 *.spec
 
+# Gedit ghost turds
+*.*~
+
+# testbot.py
+testbot.py
+
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
