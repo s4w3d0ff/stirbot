@@ -8,9 +8,6 @@ Simple Threaded IRC Bot
 ```python
 import stirbot
 
-#>>> dir(stirbot)
-#['Bot', 'Pool', 'Process', '__builtins__', '__doc__', '__file__', '__name__', '__package__', '__path__', 'cpu_count', 'logger', 'logging', 're', 'socket', 'ssl', 'sys', 'time']
-
 bot = stirbot.Bot(server="irc.freenode.net", port=7000, botnick="stirbot", pswrd=False, channelist=['#stirbot'], maxthreads=16)
 
 #>>> dir(bot)
