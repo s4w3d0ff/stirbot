@@ -10,9 +10,6 @@ import stirbot
 
 bot = stirbot.Bot(server="irc.freenode.net", port=7000, botnick="stirbot", pswrd=False, channelist=['#stirbot'], maxthreads=16)
 
-#>>> dir(bot)
-#>>> ['__class__', '__delattr__', '__dict__', '__doc__', '__format__', '__getattribute__', '__hash__', '__init__', '__module__', '__new__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__sizeof__', '__str__', '__subclasshook__', '__weakref__', '_addUser', '_auth', '_authed', '_compileCommandRe', '_compileCommands', '_compileServerRe', '_connected', '_identified', '_identifyNick', '_ircsock', '_joinChanlist', '_joinedUser', '_listen', '_listenThread', '_modeSet', '_modeUnset', '_pong', '_removeUser', '_running', '_send', '_serverConnect', '_serverDisconnect', '_serverRe', '_sniffLine', '_sniffMessage', '_somebodyQuit', '_stopThreads', '_thinkpool', '_updateACC', '_updateNames', '_updateTopic', '_waitForShutdown', 'addCommand', 'botnick', 'channellist', 'channels', 'checkACC', 'commands', 'joinChannel', 'kickUser', 'loadCommands', 'maxthreads', 'partChannel', 'port', 'pswrd', 'quit', 'removeCommand', 'sendMessage', 'sendNotice', 'server', 'setAway', 'setChannelTopic', 'setMode', 'setNick', 'shutdown', 'start', 'unsetAway', 'unsetMode']
-
 # Note: If the bot.botnick attribute is changed you will need to call the bot._compileCommands() method 
 # in order to make the appropriate changes to the server/commands regex
 # ToDo: Fix the above note to be automagic
