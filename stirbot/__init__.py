@@ -6,7 +6,7 @@ from multiprocessing.dummy import Pool, Process
 from multiprocessing import cpu_count
 import ssl
 
-logging.basicConfig(format='[%(asctime)s](ircbot) %(message)s', datefmt="%Y-%m-%d %H:%M:%S", level=logging.DEBUG)
+logging.basicConfig(format='[%(asctime)s] %(message)s', datefmt="%Y-%m-%d %H:%M:%S", level=logging.INFO)
 logger = logging.getLogger()
 logger.addHandler(logging.handlers.RotatingFileHandler('ircbot.log', maxBytes=10**9, backupCount=5)) # makes 1Gb log files, 5 files max
 
@@ -120,7 +120,7 @@ class Bot(object):
 		if match.group(2) not in self.channels:
 			self.channels.update({match.group(2):{}})
 		if match.group(1) != self.botnick:
-			self.addUser(match.group(2), match.group(1))
+			self._addUser(match.group(2), match.group(1))
 		
 	def _somebodyQuit(self, match):
 		""" Fires when a user quits"""
@@ -193,30 +193,40 @@ class Bot(object):
 		self._thinkpool.map(self._compileServerRe, self._serverRe)
 		self._thinkpool.map(self._compileCommandRe, self.commands)
 	
-	def _stopThreads(self):
-		""" Closes and joins all the threadpools, then creates new pools"""
-		logging.info('Stopping threads...')
-		self._listenThread.join(5)
-		# reset the thread incase we reboot (todo: add working reboot function)
-		self._listenThread = Process(name='Listener', target=self._listen);self._listenThread.daemon = True
-		self._thinkpool.close();self._thinkpool.join()
-		self._thinkpool = Pool(self.maxthreads)
-		logging.debug('Think pool cleared')
-		logging.info('Threads stopped!')
-	
-	def _waitForShutdown(self):
-		""" 'Blocking' loop used to keep the program running, since everything is threaded"""
-		logging.info('Blocking loop started...')
-		while self._running:
-			try: time.sleep(3) # be nice to cpu
-			except KeyboardInterrupt: self.shutdown() # make sure we close socket before closing program
 	
 	#########################################################################################################################################
 	
+	def _listen(self):
+		""" Listen for messages from IRC server"""
+		logging.info('Listening...')
+		while self._connected:
+			try:
+				data = self._ircsock.recv(4096)
+				data = data.strip(b'\r\n').decode("utf-8")
+				self._thinkpool.map(self._sniffLine, data.splitlines()) # Most of the work stems from this function, thus making it the hardest thread to close
+			
+			except socket.error as e: # stop listening if socket throws an exception 
+				logging.warn('BAD SOCKET!')
+				self._connected = False
+				self._authed = False
+				logging.exception(e)
+				break
+				
+			except Exception as e: # shutdownbot if unknown error
+				logging.info('Unknown ERROR: Shutting down...')
+				self._connected = False
+				self._authed = False
+				self._running = False
+				logging.exception(e)
+				break
+				
+		logging.info('No longer listening...')
+	
+		
 	def _serverConnect(self):
 		""" Create the connection to the IRC server"""
 		logging.info("Connecting...")
-		while not self._connected and self._running: # keep trying socket until connected, told to shutdown or unknown error
+		while not self._connected and self._running: # keep trying socket until connected or not running anymore
 			try:
 				sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # create socket
 				sock.settimeout(360) # set timeout
@@ -226,40 +236,77 @@ class Bot(object):
 				logging.info("Apparently connected...")
 				self._listenThread.start() # start listening thread
 			except socket.error as e:
-				logging.warn(e);time.sleep(5);logging.info("Trying socket again...")
-			except Exception as e: raise e
+				logging.warn('BAD SOCKET!')
+				logging.exception(e);time.sleep(5);logging.info("Trying socket again...")
+			except Exception as e:
+				logging.exception(e)
+				self._running = False
 				
 	def _serverDisconnect(self, match=False):
 		""" Disconnect from the IRC server and stop threads"""
 		logging.info('Disconnecting...')
-		self.channels = {} # clear channels
-		self._connected = False # stop listening
-		time.sleep(3) # give the internet a few seconds
-		self._authed = False # allow reconnect?
+		self.channels, self._connected, self._authed = [{}, False, False] # clear channels, stop listening
 		try:
-			self._ircsock.shutdown(socket.SHUT_RDWR) # send shutdown event
 			self._stopThreads() # let threads finish
+			#time.sleep(3) # give the internet a few seconds
+			self._ircsock.shutdown(socket.SHUT_RDWR) # send shutdown event
 			self._ircsock.close() # close socket
 			logging.info("Socket Closed!")
-		except Exception as e: logging.warn(e)
+		except Exception as e: logging.exception(e)
+	
+	
+	def _stopThreads(self):
+		""" Closes and joins all the threadpools, then creates new pools"""
+		logging.info('Stopping threads...')
+		try:
+			self._listenThread.join(3)
+			# reset the thread incase we reboot (todo: add working reboot function)
+			self._listenThread = Process(name='Listener', target=self._listen);self._listenThread.daemon = True
+		except Exception as e:
+			logging.exception(e)
+		finally:
+			self._thinkpool.close();self._thinkpool.join()
+			self._thinkpool = Pool(self.maxthreads)
+			logging.debug('Think pool cleared')
+			logging.info('Threads stopped!')
+	
+		
+	def _waitForShutdown(self):
+		""" 'Blocking' loop used to keep the program running, since everything is threaded"""
+		logging.info('Blocking loop started...')
+		while self._running:
+			try: 
+				time.sleep(1) # be nice to cpu
+				if not self._connected:
+					self._serverDisconnect()
+					if not self._running:break
+					time.sleep(15)
+					self._serverConnect() # Setup connection
+					self._auth(self.botnick) # send auth
+					if not self._authed:
+						self._serverDisconnect()
+						raise RuntimeError("not authenticated")
+					self._joinChanlist() # Join channels
+			except KeyboardInterrupt:
+				self._serverDisconnect() # close connection
+				self._running = False # stop the loop
 	
 	def _send(self, message):
 		""" Send the message to IRC server"""
 		logging.info("> %s" % message)
 		message = "%s\r\n" % message
-		self._ircsock.send(message.encode("utf-8"))
-		
-	def _listen(self):
-		""" Listen for messages from IRC server"""
-		logging.info('Listening...')
-		while self._connected:
-			try:
-				data = self._ircsock.recv(4096)
-				data = data.strip(b'\r\n').decode("utf-8")
-				self._thinkpool.map(self._sniffLine, data.splitlines())
-			except Exception as e:
-				raise e
-		logging.info('No longer listening...')
+		try:
+			self._ircsock.send(message.encode("utf-8"))
+		except socket.error as e:
+			logging.warn('BAD SOCKET!')
+			self._connected = False
+			self._authed = False
+			logging.exception(e)
+		except error as e:
+			self._connected = False
+			self._authed = False
+			logging.exception(e)
+	#################################################################################################
 	
 	def _auth(self, nick):
 		""" Login to the server"""
@@ -323,13 +370,15 @@ class Bot(object):
 	def shutdown(self, message="I'll be back..."):
 		""" Shutdown the bot with [message="I'll be back..."]"""
 		self.quit(message) # send quit message
-		self._serverDisconnect() # close connection
+		time.sleep(3) # give the internet a few seconds
 		self._running = False # stop the bots 'blocking loop'
+		self._serverDisconnect() # close connection
 	
 	def start(self, loop=True):
 		""" Start the bot"""
 		self._compileCommands()
 		self._serverConnect() # Setup connection
 		self._auth(self.botnick) # send auth
+		if not self._authed:raise RuntimeError("not authenticated")
 		self._joinChanlist() # Join channels
 		if loop: self._waitForShutdown() # Start "blocking" loop
