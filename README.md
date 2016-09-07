@@ -8,7 +8,7 @@ Simple Threaded IRC Bot
 ```python
 import stirbot
 
-bot = stirbot.Bot(server="irc.freenode.net", botnick="stirbot", channelist=['#stirbot'])
+bot = stirbot.IRCServer(server="irc.freenode.net", botnick="stirbot", channelist=['#stirbot'])
 
 # These functions get executed when their corresponding regex is found in a "PRIVMSG" or "NOTICE"
 # The Bot passes the following arguments to the commands function (in this order):
