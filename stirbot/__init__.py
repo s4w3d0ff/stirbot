@@ -1,4 +1,4 @@
-#!/usr/bin python
+#!/usr/bin/python
 import time
 import re
 import logging
@@ -35,7 +35,7 @@ class IRCServer(object):
     def __init__(
                 self, nick, host="chat.freenode.net",
                 autojoin=['#stirbot'], ssl=False, timeout=60*4,
-                reconnect=False, threads=cpu_count()**3, pswrd=False
+                threads=cpu_count()**3, pswrd=False
                 ):
         self.nick, self.host, self.pswrd  = nick, host, pswrd
         self.ssl, self.threads = ssl, threads
@@ -43,12 +43,13 @@ class IRCServer(object):
             self.port = 6666
         else:
             self.port = 7070
-        self.timeout, self.reconnect, self.threads = timeout, reconnect, threads
+        self.timeout, self.threads = timeout, threads
         self._listenThread = self._sock = None
         self._connected = self._running = self._authed = False
         self.channels, self.joinChans = {}, autojoin
         self.commands = {}
         self._pool = Pool(int(self.threads))
+        self._listenPool = Pool(int(self.threads))
         self.nickserv = 'NickServ!NickServ@services.'
         self.servHost = None
 #-------------------------------------------------------------------------------
@@ -76,7 +77,7 @@ class IRCServer(object):
                 '_Quit': CommandHandle(
                         r'^:(.*)!.* QUIT :', self._somebodyQuit
                         ),
-                '_Modeset':	CommandHandle(
+                '_Modeset':    CommandHandle(
                         r'^:.* MODE (.*) \+([A-Za-z]) (.*)', self._modeSet
                         ),
                 '_Modeunset': CommandHandle(
@@ -88,7 +89,7 @@ class IRCServer(object):
                 '_Part': CommandHandle(
                         r'^:(.*)!.* PART (.*) :.*', self._removeUser
                         ),
-                '_ACC':	CommandHandle(
+                '_ACC':    CommandHandle(
                         r'^:(.+) NOTICE %s :(.+) ACC (\d)(.*)?' % self.nick,
                         self._updateACC
                         ),
@@ -193,7 +194,7 @@ class IRCServer(object):
         logging.info('[%s] VOICES: %s' % (
                 channel, str(self.channels[channel].voices)
                 ))
-    
+
     def _updateACC(self, match):
         """ Updates an users ACC level """
         logging.debug(match.group(0))
@@ -346,16 +347,15 @@ class IRCServer(object):
         logging.info('[%s] %s: %s' % (chan, nick, message))
         for name in self.commands:
             for regex in self.commands[name].cregex:
-	            cmatch = regex.search(message)
-	            if cmatch:
-		            self.commands[name].function(chan, nick, host, cmatch)
+                cmatch = regex.search(message)
+                if cmatch:
+                    self.commands[name].function(chan, nick, host, cmatch)
                     return True
 #-------------------------------------------------------------------------------
     def _identifyNick(self, pswrd):
         """ Identify bot nickname with nickserv """
-        logging.debug(match.group(0))
         self._send("NICKSERV IDENTIFY %s" % (pswrd))
-    
+
     def auth(self, nick):
         """ Login to the IRC server and identify with nickserv"""
         logging.info('Authenticating bot with server...')
@@ -365,14 +365,15 @@ class IRCServer(object):
             )
         self._send("NICK %s" % nick)
         if self.pswrd:
-	        self._identifyNick(self.pswrd)
-	        logging.info('Waiting on Nickserv...')
-	        count = 0
-	        while not self._authed:
-	            time.sleep(5)
-	            count += 1
-	            if count > 5:
-	                raise RuntimeError('Failed to auth with Nickserv')
+            logging.debug('We have a nick password!')
+            self._identifyNick(self.pswrd)
+            logging.info('Waiting on Nickserv...')
+            count = 0
+            while not self._authed:
+                time.sleep(5)
+                count += 1
+                if count > 5:
+                    raise RuntimeError('Failed to auth with Nickserv')
         else:
             self._authed = True
 
@@ -414,10 +415,11 @@ class IRCServer(object):
                     continue
                 try:
                     data = data.strip(b'\r\n').decode("utf-8")
-                    self._pool.map(self._sniffLine, data.splitlines())
+                    self._listenPool.map(self._sniffLine, data.splitlines())
                 except Exception as e:
                     logging.exception(e)
                     continue
+        self._listenPool.join()
         logging.info('No longer listening...')
 
     def connect(self):
@@ -451,25 +453,26 @@ class IRCServer(object):
         self.servHost, self.channels = None, {}
         try:
             self._pool.close()
+            self._listenPool.close()
         except Exception as e:
             logging.exception(e)
         logging.debug('Pool closed')
         try:
             self._pool.join()
         except Exception as e:
-	        logging.exception(e)
+            logging.exception(e)
         logging.debug('Pool joined')
         self._pool = Pool(self.threads)
         logging.debug('Pool cleared')
         try:
             self._listenThread.join()
         except Exception as e:
-	        logging.exception(e)
+            logging.exception(e)
         logging.debug('Listen Thread joined(?)')
         try:
             self._sock.close()
         except Exception as e:
-	        logging.exception(e)
+            logging.exception(e)
         logging.debug('Socket closed(?)')
         logging.info('Disconnected!')
 
@@ -504,8 +507,8 @@ if __name__ == "__main__":
     logger.addHandler(
             RotatingFileHandler('ircbot.log', maxBytes=10**9, backupCount=5)
             )
-    bot = IRCServer('stirbot', ssl=True, autojoin=['#stirbot'])
-    def shutit(channel, nick, match):
+    bot = IRCServer('s10tb0t', ssl=True)
+    def shutit(channel, nick, host, match):
         bot.sendMessage(channel, '%s asked me to quit! See ya!' % nick)
         bot._running = False
         bot.quit()
